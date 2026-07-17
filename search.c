@@ -5,47 +5,76 @@
 #include <time.h>
 
 pthread_mutex_t fileLock;
+pthread_mutex_t indexLock;
 
-struct ThreadData
+char *keyword;
+char **fileNames;
+int fileCount;
+int nextFileIndex;
+FILE *outputFile;
+
+/*
+ * Every requested thread runs this function. Instead of pre-assigning one
+ * fixed file per thread (which forces threadCount to be capped down to
+ * fileCount whenever more threads are requested than there are files),
+ * each thread pulls the next unclaimed file from a shared index protected
+ * by indexLock. This lets threadCount stay exactly what was requested:
+ * with more threads than files, the extra threads are still created and
+ * joined (so their overhead is real and measurable) but simply find no
+ * file left to claim and exit immediately.
+ */
+void *searchFiles(void *argument)
 {
-    char *keyword;
-    char *fileName;
-    FILE *outputFile;
-};
+    (void)argument;
 
-void *searchFile(void *argument)
-{
-    struct ThreadData *data = (struct ThreadData *)argument;
-
-    FILE *inputFile = fopen(data->fileName, "r");
-
-    if (inputFile == NULL)
+    while (1)
     {
-        printf("Cannot open %s\n", data->fileName);
-        return NULL;
-    }
+        pthread_mutex_lock(&indexLock);
 
-    char word[100];
-    int occurrences = 0;
+        int index = nextFileIndex;
 
-    while (fscanf(inputFile, "%99s", word) == 1)
-    {
-        if (strcmp(word, data->keyword) == 0)
+        if (index < fileCount)
         {
-            occurrences++;
+            nextFileIndex++;
         }
+
+        pthread_mutex_unlock(&indexLock);
+
+        if (index >= fileCount)
+        {
+            break;
+        }
+
+        FILE *inputFile = fopen(fileNames[index], "r");
+
+        if (inputFile == NULL)
+        {
+            printf("Cannot open %s\n", fileNames[index]);
+            continue;
+        }
+
+        char word[100];
+        int occurrences = 0;
+
+        while (fscanf(inputFile, "%99s", word) == 1)
+        {
+            if (strcmp(word, keyword) == 0)
+            {
+                occurrences++;
+            }
+        }
+
+        fclose(inputFile);
+
+        pthread_mutex_lock(&fileLock);
+
+        fprintf(outputFile,
+                "%s : %d occurrences\n",
+                fileNames[index],
+                occurrences);
+
+        pthread_mutex_unlock(&fileLock);
     }
-
-    fclose(inputFile);
-
-    pthread_mutex_lock(&fileLock);
-
-    fprintf(data->outputFile,
-            "%s : %d occurrences\n",
-            data->fileName,
-            occurrences);
-
-    pthread_mutex_unlock(&fileLock);
 
     return NULL;
 }
@@ -59,25 +88,22 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    char *keyword = argv[1];
+    keyword = argv[1];
 
     char *outputName = argv[2];
 
     int threadCount = atoi(argv[argc - 1]);
-
-    int fileCount = argc - 4;
-
-    if (threadCount > fileCount)
-    {
-        threadCount = fileCount;
-    }
 
     if (threadCount < 1)
     {
         threadCount = 1;
     }
 
-    FILE *outputFile = fopen(outputName, "w");
+    fileNames = &argv[3];
+    fileCount = argc - 4;
+    nextFileIndex = 0;
+
+    outputFile = fopen(outputName, "w");
 
     if (outputFile == NULL)
     {
@@ -86,47 +112,28 @@ int main(int argc, char *argv[])
     }
 
     pthread_mutex_init(&fileLock, NULL);
+    pthread_mutex_init(&indexLock, NULL);
 
-    pthread_t threads[threadCount];
-
-    struct ThreadData files[threadCount];
+    pthread_t *threads = malloc(threadCount * sizeof(pthread_t));
 
     clock_t startTime = clock();
 
-    int filesStarted = 0;
-
-    while (filesStarted < fileCount)
+    for (int i = 0; i < threadCount; i++)
     {
-        int batchSize = threadCount;
+        pthread_create(&threads[i], NULL, searchFiles, NULL);
+    }
 
-        if (filesStarted + batchSize > fileCount)
-        {
-            batchSize = fileCount - filesStarted;
-        }
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            files[i].keyword = keyword;
-            files[i].fileName = argv[filesStarted + i + 3];
-            files[i].outputFile = outputFile;
-
-            pthread_create(&threads[i],
-                           NULL,
-                           searchFile,
-                           &files[i]);
-        }
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            pthread_join(threads[i], NULL);
-        }
-
-        filesStarted += batchSize;
+    for (int i = 0; i < threadCount; i++)
+    {
+        pthread_join(threads[i], NULL);
     }
 
     clock_t endTime = clock();
 
+    free(threads);
+
     pthread_mutex_destroy(&fileLock);
+    pthread_mutex_destroy(&indexLock);
 
     fclose(outputFile);
 
@@ -134,6 +141,7 @@ int main(int argc, char *argv[])
         (double)(endTime - startTime) / CLOCKS_PER_SEC;
 
     printf("Search completed successfully.\n");
+    printf("Threads requested: %d | Files to search: %d\n", threadCount, fileCount);
     printf("Execution time: %.4f seconds\n", executionTime);
 
     return 0;
