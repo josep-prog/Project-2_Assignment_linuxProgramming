@@ -4,13 +4,19 @@
 
 **Date :** 17th July 2026
 
-| Name | Link |
-| :---- | :---- |
-| Question 1: fork, execvp , pipe | [child\_processes.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/child_processes.c)  |
-| Question 2 : low-level system calls | standard I/O functions | [copy\_system.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/copy_system.c)  |
-|  | [copy\_stdio.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/copy_stdio.c)  |
-| Question 3: prime numbers between 1 and 200,000 using 16 threads | [multithreading.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/multithreading.c)  |
-| Question 4: multithreaded keyword search across files | [search.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/search.c)  |
+| Name | Link |  |
+| :---- | :---- | :---- |
+| Question 1: fork, execvp , pipe | [child\_processes.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/child_processes.c)  |  |
+|  | Strace logs | [q1\_pipeline\_excerpt.txt](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/strace_logs/q1_pipeline_excerpt.txt)  |
+|  |  | [q1\_syscall\_summary.txt](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/strace_logs/q1_syscall_summary.txt)  |
+| Question 2 : low-level system calls | standard I/O functions | [copy\_system.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/copy_system.c)  |  |
+|  |  |  |
+|  | [copy\_stdio.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/copy_stdio.c)  |  |
+|  | Strace logs | [q2\_copy\_stdio\_summary.txt](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/strace_logs/q2_copy_stdio_summary.txt)  |
+|  |  | [q2\_copy\_system\_summary.txt](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/strace_logs/q2_copy_system_summary.txt)  |
+| Question 3: prime numbers between 1 and 200,000 using 16 threads | [multithreading.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/multithreading.c)  |  |
+| Question 4: multithreaded keyword search across files | [search.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/search.c)  |  |
+|  | Strace logs | [q4\_thread\_count\_verification.txt](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/strace_logs/q4_thread_count_verification.txt)  |
 
 ## 
 
@@ -28,36 +34,7 @@ The main challenge was understanding how dup2() redirects input and output. At f
 
 ## **Execution Behavior**
 
-The program compiled and ran successfully. It created two child processes, executed ps aux and grep root, saved the filtered output into **output.txt**, and displayed part of the file.
-
-**strace analysis.** I traced the program with:
-
-```
-strace -f -tt -e trace=clone,execve,pipe,pipe2,dup2,openat,open,read,write,close,wait4 -o strace_logs/q1_pipeline_excerpt.txt ./child_processes
-```
-
-The filtered log (full copy in [`strace_logs/q1_pipeline_excerpt.txt`](strace_logs/q1_pipeline_excerpt.txt)) shows the exact sequence the code produces:
-
-```
-201459 execve("./child_processes", ...) = 0
-201459 pipe2([3, 4], 0) = 0
-201459 clone(...) = 201460        # first child: will run ps aux
-201459 clone(...) = 201461        # second child: will run grep root
-201461 openat(AT_FDCWD, "output.txt", O_WRONLY|O_CREAT|O_TRUNC, 0644) = 5
-201460 dup2(4, 1) = 1             # child 1: stdout -> pipe write end
-201461 dup2(3, 0) = 0             # child 2: stdin  -> pipe read end
-201459 wait4(-1 <unfinished ...>  # parent blocks here
-201461 dup2(5, 1) = 1             # child 2: stdout -> output.txt
-201460 execve("/usr/bin/ps",   ["ps", "aux"], ...)   = 0
-201461 execve("/usr/bin/grep", ["grep", "root"], ...) = 0
-201459 <... wait4 resumed>) = 201460
-201459 wait4(-1, NULL, 0, NULL) = 201461
-201459 openat(AT_FDCWD, "output.txt", O_RDONLY) = 3
-```
-
-This is a direct trace of the program's own logic: `fork()` shows up as two `clone()` calls (PIDs 201460 and 201461) made by the parent (201459); `pipe()` appears as `pipe2([3,4], 0)` creating the read/write ends *before* either child exists, which is exactly why both children inherit the same fds; each child's `dup2()` call rewires its stdin/stdout onto the pipe (or onto `output.txt` for the grep child) before it calls `execvp()`, which is why redirection has to happen before `execve()` and not after; and the parent's two `wait4()` calls block until both children exit, guaranteeing `output.txt` is fully written before the parent's own `openat(..., O_RDONLY)` reads it back — confirming the ordering my "Challenges" section above described.
-
-A full `strace -f -c ./child_processes` run (saved in [`strace_logs/q1_syscall_summary.txt`](strace_logs/q1_syscall_summary.txt)) counted **2 `clone`, 1 `pipe2`, 3 `dup2`, 3 `execve`, and 2 `wait4`** calls — matching one `pipe()`/`fork()` pair per child and one redirect per fd being changed, plus one `execve` for the shell-less program itself, `ps`, and `grep`. The large `read`/`openat`/`close` counts in that summary (1174/1380/936 calls) come from `ps aux` itself scanning every process's `/proc/<pid>/stat` entry, not from the pipeline code — this is expected `ps` behavior, not overhead introduced by my program.
+The program compiled and ran successfully. It created two child processes, executed ps aux and grep root, saved the filtered output into **output.txt**, and displayed part of the file. Using **strace**, I confirmed that the expected system calls were executed, including fork() (shown as clone()), pipe() (pipe2()), dup2(), execve(), open(), read(), write(), close(), and wait4(). This helped me understand how Linux creates processes, redirects input and output, and manages communication between processes.
 
 ## gcc \-o child\_processes child\_processes.c
 
@@ -105,24 +82,7 @@ dd if=/dev/urandom of=largefile.bin bs=1M count=100
 
 ./copy\_stdio    \# writes copy\_stdio.bin
 
-Both programs successfully copied the 100 MB file, and I confirmed that the copied files were identical to the original using diff. The execution time showed that the standard I/O version was slightly faster (**0.1932 seconds**) than the system call version (**0.2185 seconds**), though I noticed on repeat runs the gap is small and inconsistent — with disk caching involved, this timing difference is noisy and shouldn't be read as a reliable performance verdict from a single run.
-
-**strace analysis.** To actually verify the "same number of system calls" claim instead of just asserting it, I ran:
-
-```
-strace -c -o strace_logs/q2_copy_system_summary.txt ./copy_system
-strace -c -o strace_logs/q2_copy_stdio_summary.txt  ./copy_stdio
-```
-
-| syscall | copy\_system (read/write) | copy\_stdio (fread/fwrite) |
-| :---- | :---- | :---- |
-| read | 25602 | 25602 |
-| write | 25601 | 25601 |
-| openat | 4 | 4 |
-| close | 4 | 4 |
-| total syscalls | 25626 | 25630 |
-
-(Full per-call breakdowns are in [`strace_logs/q2_copy_system_summary.txt`](strace_logs/q2_copy_system_summary.txt) and [`strace_logs/q2_copy_stdio_summary.txt`](strace_logs/q2_copy_stdio_summary.txt).) 100 MB copied in 4096-byte chunks is 100×1024×1024 / 4096 = 25600 chunks, plus one extra empty-return `read` at EOF, which lines up exactly with the 25601/25602 counts — proving the two programs hit the kernel the same number of times. This is concrete evidence, not just an inference: `fread()`/`fwrite()` are a *user-space* buffer sitting on top of the same `read()`/`write()` syscalls, so when both programs use identical 4096-byte buffers, stdio adds no syscall-count benefit at all. The benefit stdio usually provides only shows up when the stdio buffer is left at its own default (typically larger than the app's manual buffer, e.g. `BUFSIZ` internals) or when the caller uses a small read/write size while stdio coalesces it internally — neither of which applies here since I sized both buffers at 4096 bytes on purpose. This confirms the buffer-size explanation in the Challenges section above with actual numbers instead of a guess.
+Both programs successfully copied the 100 MB file, and I confirmed that the copied files were identical to the original using diff. The execution time showed that the standard I/O version was slightly faster (**0.1932 seconds**) than the system call version (**0.2185 seconds**). Using **strace**, I also observed that both programs made nearly the same number of system calls because they used the same buffer size. From this assignment, I learned that standard I/O can improve performance, but it does not always reduce the number of system calls. The results depend on how the program is implemented and the buffer size that is used.
 
 ## 
 
@@ -164,11 +124,7 @@ The goal was to search for a keyword across multiple text files in parallel, one
 
 ### **Implementation**
 
-For this one I wrote a program that accepts a keyword, an output file, one or more input files, and the number of threads as command-line arguments. Each requested thread is started, and instead of statically pre-assigning one fixed file per thread, every thread repeatedly pulls the next unclaimed file from a shared index (protected by a mutex) until no files are left. Each thread opens its claimed file using fopen(), reads each word with fscanf(), compares it with the keyword using strcmp(), and counts the number of matches, then writes its result to a shared output file using fprintf() (protected by a second mutex so writes never interleave). The program measures the execution time using clock() and repeats the test with different thread counts.
-
-**Fixing a thread-capping bug.** My first version capped `threadCount` down to the number of files whenever more threads were requested than files existed (e.g. requesting 8 threads with only 6 files silently became 6 threads) — which meant two of the three required test configurations ended up creating the *same* actual number of threads, defeating the point of comparing them. I fixed this by switching from "one thread pre-assigned to one file" to the shared-index pull model described above: now exactly `threadCount` OS threads are created and joined every time, no matter how many files there are. If there are more threads than files, the extra threads simply find the shared index already exhausted and exit immediately — but they are still genuinely created, so their creation/join cost is really paid and really measured, instead of being silently designed away.
-
-I verified this with strace: `strace -f -c -e trace=clone ./search root out.txt f1.txt f2.txt f3.txt f4.txt f5.txt f6.txt 8` (6 files, 8 threads requested) reports **8 `clone3` calls** — proof that all 8 threads are now actually created rather than being capped to 6 (full output in [`strace_logs/q4_thread_count_verification.txt`](strace_logs/q4_thread_count_verification.txt)).
+For this one I wrote a program that accepts a keyword, an output file, one or more input files, and the number of threads as command-line arguments. Each thread is assigned one file to search. The thread opens its file using fopen(), reads each word with fscanf(), compares it with the keyword using strcmp(), and counts the number of matches. After finishing, the thread writes its result to a shared output file using fprintf(). Since multiple threads share the same output file, I used a pthread\_mutex\_t mutex to ensure that only one thread writes to the file at a time. The program measures the execution time using clock() and repeats the test with different thread counts.
 
 ### **Measured results**
 
@@ -178,17 +134,17 @@ For example :
 
 ./search root results.txt logs/a.txt logs/b.txt logs/c.txt 4
 
-gcc \-O2 \-pthread \-o search search.c
+gcc \-o search   search.c  \-lpthread
 
-For testing, I used six text files, each containing 1,177 occurrences of the keyword "root." I then ran the program using the three thread configurations required by the assignment and compared the execution times: 
+For testing, I used six text files, each around 128 KB and containing about 2,000 occurrences of the keyword "root." I then ran the program using the three thread configurations required by the assignment and compared the execution times: 
 
-| Threads requested | Why this number | Threads actually created (verified via strace) | Execution time |
+| Threads requested | Why this number | Threads actually used | Execution time |
 | :---- | :---- | :---- | :---- |
-| 2 | The 2-thread case the assignment asks for | 2 | 0.0028 s |
-| 6 | Max threads one thread per file, since there are 6 files | 6 | 0.0048 s |
-| 8 | Average CPU cores  nproc reports 8 cores on this machine | 8 (no longer capped — 2 of them find no file left and exit right away) | 0.0053 s |
+| 2 | The 2-thread case the assignment asks for | 2 | 0.0172 s |
+| 6 | Max threads one thread per file, since there are 6 files | 6 | 0.0219 s |
+| 8 | Average CPU cores  nproc reports 8 cores on this machine | 6 (capped, only 6 files to hand out) | 0.0187 s |
 
-All three runs gave the exact same occurrence counts per file, so asking for more threads never changed the answer, only the speed. With files this small, the actual search barely takes any time, so most of what you're measuring is the overhead of creating and joining threads — that's why more threads doesn't make things faster here, and in fact 8 threads is slightly slower than 6 or 2 purely from paying extra thread-creation/join cost for threads that end up doing no work. You'd need much bigger files, or many more files than threads, before adding threads actually pays off.
+All three runs gave the exact same occurrence counts per file, so asking for more threads never changed the answer, only the speed. With files this small, the actual search barely takes any time, so most of what you're measuring is the overhead of creating and joining threads  that's why 6 threads isn't clearly faster than 2, and why asking for 8 threads doesn't help once it gets capped down to 6\. You'd need much bigger files before adding threads actually pays off.
 
 ## **Challenges**
 
