@@ -1,157 +1,145 @@
-# Project 2: Linux Systems Programming
+# **Project 2: Linux Systems Programming**
 
-Four C programs exploring Linux process management, I/O, and multithreading with POSIX APIs: process pipelines (`fork`/`pipe`/`exec`), file copying (raw syscalls vs. buffered stdio), parallel prime counting (`pthread` + mutex), and multithreaded keyword search across files.
+**Repository :** [Project-2\_Assignment\_linuxProgramming](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming.git) 
 
-## Contents
+**Date :** 17th July 2026
 
-| File | Question | What it does |
-|---|---|---|
-| `child_processes.c` | 1 | Recreates `ps aux \| grep root` using `fork()`, `pipe()`, `dup2()`, `execvp()` |
-| `copy_system.c` | 2 | Copies a large file using raw `read()`/`write()` syscalls |
-| `copy_stdio.c` | 2 | Copies a large file using buffered `fread()`/`fwrite()` |
-| `multithreading.c` | 3 | Counts primes between 1 and 200,000 using 16 threads + mutex |
-| `search.c` | 4 | Multithreaded keyword search across multiple text files |
+| Name | Link |
+| :---- | :---- |
+| Question 1: fork, execvp , pipe | [child\_processes.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/child_processes.c)  |
+| Question 2 : low-level system calls | standard I/O functions | [copy\_system.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/copy_system.c)  |
+|  | [copy\_stdio.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/copy_stdio.c)  |
+| Question 3: prime numbers between 1 and 200,000 using 16 threads | [multithreading.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/multithreading.c)  |
+| Question 4: multithreaded keyword search across files | [search.c](https://github.com/josep-prog/Project-2_Assignment_linuxProgramming/blob/main/search.c)  |
 
-## Prerequisites
+## 
 
-- Linux (uses `<unistd.h>`, `<sys/wait.h>`, POSIX threads)
-- `gcc`
-- `strace` (optional, only needed to reproduce the syscall counts below)
+**Question 1 : process pipeline**
 
-## Build
+The objective of this assignment was to help me understand how processes communicate in Linux using system calls. Since I am learning process programming for the first time, I wanted to understand what happens behind the scenes when a command like ps aux | grep root is executed. Instead of running the command directly in the terminal, I wrote a C program that creates the pipeline using fork(), pipe(), dup2(), and execvp(). I also used **strace** to observe the system calls used during execution.
 
-```bash
-gcc -O2 -o child_processes child_processes.c
-gcc -O2 -o copy_system     copy_system.c
-gcc -O2 -o copy_stdio      copy_stdio.c
-gcc -O2 -o multithreading  multithreading.c -lpthread
-gcc -O2 -o search          search.c -lpthread
-```
+## **Implementation**
 
-## Run
+I first created a pipe so that two child processes could communicate. The first child process redirects its standard output to the pipe and executes ps aux using execvp(). The second child redirects its standard input to the pipe, redirects its standard output to **output.txt**, and executes grep root. This allows the output of ps aux to be filtered and saved into the file. The parent process closes the pipe, waits for both children to finish using wait(), then opens the file, reads part of its contents, and displays it on the screen.
 
-**Question 1 — process pipeline**
-```bash
-./child_processes
-```
-Runs `ps aux | grep root` internally via two forked children connected by a pipe, writes the filtered result to `output.txt`, then the parent reads and prints a preview.
+## **Challenges**
 
-**Question 2 — file copy comparison**
+The main challenge was understanding how dup2() redirects input and output. At first, I found it confusing how one process writes to the pipe while another reads from it. I also learned that every process must close the pipe ends it does not use. Another challenge was making sure the parent waited for both child processes before reading the output file, so that all the data had already been written.
 
-Needs a large source file named `largefile.bin` in the working directory:
-```bash
+## **Execution Behavior**
+
+The program compiled and ran successfully. It created two child processes, executed ps aux and grep root, saved the filtered output into **output.txt**, and displayed part of the file. Using **strace**, I confirmed that the expected system calls were executed, including fork() (shown as clone()), pipe() (pipe2()), dup2(), execve(), open(), read(), write(), close(), and wait4(). This helped me understand how Linux creates processes, redirects input and output, and manages communication between processes.
+
+## gcc \-o child\_processes child\_processes.c
+
+## ./child\_processes
+
+Runs ps aux | grep root internally via two forked children connected by a pipe, writes the filtered result to output.txt, then the parent reads and prints a preview.
+
+## 
+
+## 
+
+## 
+
+## 
+
+## 
+
+## 
+
+## 
+
+## **Question 2: File Copy Using System Calls and Standard I/O**
+
+The goal of this question was to compare two different ways of copying a large file in C. The first version uses low-level Linux system calls (read() and write()), while the second version uses the standard C library functions (fread() and fwrite()). Since I am learning file handling for the first time, this assignment helped me understand the difference between these two approaches. I also used **strace** to compare the number of system calls and measured the execution time of each program while copying a 100 MB file.
+
+## **Implementation**
+
+I wrote two separate programs because each one demonstrates a different method of copying a file. The first program, **copy\_system.c**, opens the source and destination files using open(), copies the file with read() and write(), and closes the files using close(). The second program, **copy\_stdio.c**, performs the same task using fopen(), fread(), fwrite(), and fclose(). Both programs use the same buffer size of **4096 bytes** and measure their execution time using clock().
+
+## **Challenges**
+
+The main challenge was understanding why I needed two separate programs instead of combining everything into one file. I learned that the purpose of the assignment is to compare two different file-copy methods fairly. Another challenge was understanding why the strace results showed almost the same number of system calls. After reviewing the results, I realized that both programs use the same 4096-byte buffer, so they make almost the same number of read() operations. This showed me that using fread() and fwrite() does not always reduce the number of system calls. The difference depends on the buffer size being used.
+
+## **Execution Behavior**
+
+gcc  \-o copy\_system     copy\_system.c
+
+gcc  \-o copy\_stdio      copy\_stdio.c
+
+Needs a large source file named largefile.bin in the working directory:
+
 dd if=/dev/urandom of=largefile.bin bs=1M count=100
-./copy_system   # writes copy_system.bin
-./copy_stdio    # writes copy_stdio.bin
-```
 
-**Question 3 — parallel prime counting**
-```bash
+./copy\_system   \# writes copy\_system.bin
+
+./copy\_stdio    \# writes copy\_stdio.bin
+
+Both programs successfully copied the 100 MB file, and I confirmed that the copied files were identical to the original using diff. The execution time showed that the standard I/O version was slightly faster (**0.1932 seconds**) than the system call version (**0.2185 seconds**). Using **strace**, I also observed that both programs made nearly the same number of system calls because they used the same buffer size. From this assignment, I learned that standard I/O can improve performance, but it does not always reduce the number of system calls. The results depend on how the program is implemented and the buffer size that is used.
+
+## 
+
+## 
+
+## **Question 3: Parallel prime counting (pthread, mutex)**
+
+### 
+
+The objective of this assignment was to learn how to use multiple threads in C to solve a problem faster. Since I am learning multithreading for the first time, this assignment helped me understand how POSIX threads (pthread) work, how a large task can be divided among several threads, and why synchronization is important when multiple threads access the same shared variable.
+
+## **Implementation**
+
+I created a program that uses **16 POSIX threads** to count the prime numbers between **1 and 200,000**. I divided the range equally so that each thread processes its own section of numbers. Each thread counts the prime numbers in its assigned range and stores the result in a local variable. After finishing, the thread updates the shared variable totalPrimes. To prevent multiple threads from modifying the shared variable at the same time, I used a pthread\_mutex\_t mutex. Each thread locks the mutex before updating the counter and unlocks it immediately after the update. Finally, the main thread waits for all 16 threads to finish using pthread\_join() before printing the total number of prime numbers.
+
+## **Challenges**
+
+The main challenge was understanding why a mutex was necessary. At first, I thought each thread could update the shared counter directly. However, I learned that if multiple threads write to the same variable at the same time, the final result may be incorrect due to a race condition. Using pthread\_mutex\_lock() and pthread\_mutex\_unlock() ensured that only one thread updated the shared counter at a time. I also had to make sure that the workload was divided evenly so every thread processed a different range of numbers.
+
+## **Execution Behavior**
+
 ./multithreading
-```
-No arguments; always counts primes in `[1, 200000]` across 16 threads.
 
-**Question 4 — multithreaded search**
-```bash
-./search <keyword> <output.txt> <file1.txt> <file2.txt> ... <number_of_threads>
-# example:
-./search root results.txt logs/a.txt logs/b.txt logs/c.txt 4
-```
-If `number_of_threads` exceeds the number of input files, the program caps it at the file count.
+No arguments; always counts primes in \[1, 200000\] across 16 threads.
 
----
+gcc \-O2 \-pthread \-o multithreading multithreading.c
 
-## Question 1: Process pipeline (`fork`, `pipe`, `dup2`, `execvp`)
+The program compiled and executed successfully. All **16 threads** were created, each processed its assigned range, and the final result was printed only after all threads completed their work. The output displayed the synchronized total number of prime numbers between **1 and 200,000**, confirming that the threads worked correctly and that the mutex successfully protected the shared counter from race conditions. This assignment helped me understand how multithreading can improve performance while synchronization ensures that shared data remains correct.
 
-### Explanation
+## 
 
-The goal was to understand how processes communicate in Linux using system calls, by reimplementing `ps aux | grep root` in C instead of running it directly in a shell. The program creates two child processes with `fork()`. The first executes `ps aux`, the second executes `grep root`, and a pipe connects the first child's stdout to the second child's stdin — the same relationship the shell sets up for you with `|`. Rather than printing the result immediately, the filtered output is written to a file; the parent then opens that file, reads part of it, and prints it. `strace` was used to observe the actual system calls made during process creation, pipe communication, and file I/O.
+## 
 
-### Implementation
+## **Question 4: Multithreaded file search (pthread, mutex, CLI args)**
 
-A pipe is created first, giving a read end and a write end shared between the two children. The first child redirects its stdout to the pipe's write end with `dup2()` before calling `execvp("ps", ["ps", "aux"])`. The second child redirects its stdin to the pipe's read end and its stdout to an output file, then calls `execvp("grep", ["grep", "root"])`. Each child closes the pipe descriptors it doesn't need immediately after `dup2()`, and the parent closes both ends once the children are launched. The parent calls `wait()` twice to ensure both children finish — and therefore that the output file is fully written — before opening it and reading a preview with `read()`.
-
-### Challenges
-
-Understanding `dup2()`-based redirection was the main challenge: both children share the same pipe, but each uses a different end, and every process needs to close the descriptors it isn't using or the pipe never signals EOF correctly. The other challenge was avoiding a read-before-write race on the output file, solved by calling `wait()` for both children before the parent touches the file.
-
-### Verified behavior
-
-Compiled with `gcc -O2` and run directly (no `strace` overhead) — completed correctly, printing the `ps aux` lines containing `root` and a byte count read back from `output.txt`. Under `strace -f -c`, the run showed 2 `clone` calls (the two `fork()`s), 3 `dup2` calls, and 1 `pipe2` call, matching the implementation exactly.
-
----
-
-## Question 2: File copy — raw syscalls vs. buffered stdio
-
-### Explanation
-
-The goal was to compare low-level system calls (`read()`/`write()`) against standard C library I/O (`fread()`/`fwrite()`) when copying a large file, and to understand how buffering affects the number of system calls and overall performance. Both versions use the same 4096-byte buffer size and were tested against a 100 MB file generated with `dd if=/dev/urandom`.
-
-### Implementation
-
-`copy_system.c` opens both files with `open()` and loops on `read()`/`write()`, each of which is a direct system call. `copy_stdio.c` opens both files with `fopen()` and loops on `fread()`/`fwrite()`, which go through the C library's internal `FILE*` buffer before hitting the kernel. Both versions time themselves with `clock()` around the copy loop.
-
-### Measured results
-
-Run on this machine, 100 MB random source file, 4096-byte buffer in both versions:
-
-| Metric | `copy_system` (raw) | `copy_stdio` (buffered) |
-|---|---|---|
-| Execution time | 0.2185 s | 0.1932 s |
-| `read` syscalls (strace -c) | 25,602 | 25,602 |
-| Total syscalls (strace -c) | 51,241 | 51,243 |
-| Output correctness | `diff` against source: identical | `diff` against source: identical |
-
-### Performance analysis (honest version)
-
-The buffered version was consistently a bit faster (~12% in this run), but **the syscall counts were essentially identical between the two**, because both programs use the *same* 4096-byte buffer size — `fread()`/`fwrite()` only reduce syscalls when the library buffer is *larger* than what the raw version reads per call. With matched buffer sizes, stdio's advantage here comes from smaller fixed per-call overhead (no `errno` handling, inlined memcpy paths) rather than fewer kernel transitions. To see the syscall-count gap the original hypothesis expects, `copy_system` would need a *smaller* buffer (e.g. 512 bytes) while `copy_stdio` keeps `BUFFER_SIZE` at 4096 — that widens the read-count difference because stdio still batches its underlying `read()`s at the larger internal buffer size.
-
-This is a more accurate takeaway than "stdio always makes fewer syscalls" — it depends on the relationship between the two buffer sizes, not just which API is used.
-
----
-
-## Question 3: Parallel prime counting (`pthread`, mutex)
-
-### Explanation
-
-The goal was to count primes in `[1, 200000]` using 16 POSIX threads instead of a single-threaded loop, dividing the range into 16 equal contiguous chunks (one per thread) and combining results into one shared counter, `totalPrimes`, protected by a `pthread_mutex_t`.
-
-### Implementation
-
-`isPrime()` trial-divides only up to `sqrt(n)`. Each thread receives a `{start, end}` range via `ThreadData`, accumulates its own `localCount` locally (avoiding a lock on every increment), and only takes the mutex once at the end to add its local count into the shared `totalPrimes`. The main thread creates all 16 threads with `pthread_create()`, joins them with `pthread_join()`, then destroys the mutex and prints the result.
-
-### Challenges
-
-The main risk was a race condition if all 16 threads incremented `totalPrimes` directly and concurrently. Accumulating locally and merging once per thread (rather than locking on every prime found) both fixes the race and minimizes lock contention. Dividing the range evenly required giving the leftover numbers (200000 doesn't divide evenly by 16 in this case it does, but the code still handles the general case) to the last thread.
-
-### Verified results
-
-Compiled and run: **17,984 primes** found between 1 and 200,000 — this matches the known count (the actual number of primes below 200,000 is 17,984), confirming the range partitioning and merge logic are correct with no off-by-one gaps or overlaps. `time` reported 388% CPU utilization (multiple cores active) and 0.011s wall-clock time.
-
----
-
-## Question 4: Multithreaded file search (`pthread`, mutex, CLI args)
-
-### Explanation
+### 
 
 The goal was to search for a keyword across multiple text files in parallel, one thread per file, writing all results to a single shared output file, and to compare execution time across different thread counts.
 
-### Implementation
+### **Implementation**
 
-Arguments are parsed as `keyword`, `output file`, one or more input files, and a trailing thread count; if the requested thread count exceeds the number of files, it's capped to the file count. Each thread opens its assigned file, tokenizes it with `fscanf("%99s", ...)`, and compares each token against the keyword with `strcmp()`. Threads are launched and joined in batches sized to the thread count (so at most `threadCount` threads run concurrently even with more files than threads). Writing to the shared output file is protected by a mutex so concurrent `fprintf()` calls from different threads can't interleave.
+For this one I wrote a program that accepts a keyword, an output file, one or more input files, and the number of threads as command-line arguments. Each thread is assigned one file to search. The thread opens its file using fopen(), reads each word with fscanf(), compares it with the keyword using strcmp(), and counts the number of matches. After finishing, the thread writes its result to a shared output file using fprintf(). Since multiple threads share the same output file, I used a pthread\_mutex\_t mutex to ensure that only one thread writes to the file at a time. The program measures the execution time using clock() and repeats the test with different thread counts.
 
-### Measured results
+### **Measured results**
 
-6 test files (~128 KB each, ~2,000 occurrences of the keyword `root` per file). The assignment asks for three specific runs, so here they are with what each one means in plain terms:
+./search \<keyword\> \<output.txt\> \<file1.txt\> \<file2.txt\> ... \<number\_of\_threads\>
+
+For example : 
+
+./search root results.txt logs/a.txt logs/b.txt logs/c.txt 4
+
+gcc \-O2 \-pthread \-o search search.c
+
+For testing, I used six text files, each around 128 KB and containing about 2,000 occurrences of the keyword "root." I then ran the program using the three thread configurations required by the assignment and compared the execution times: 
 
 | Threads requested | Why this number | Threads actually used | Execution time |
-|---|---|---|---|
+| :---- | :---- | :---- | :---- |
 | 2 | The 2-thread case the assignment asks for | 2 | 0.0172 s |
-| 6 | Max threads — one thread per file, since there are 6 files | 6 | 0.0219 s |
-| 8 | Average CPU cores — `nproc` reports 8 cores on this machine | 6 (capped, only 6 files to hand out) | 0.0187 s |
+| 6 | Max threads one thread per file, since there are 6 files | 6 | 0.0219 s |
+| 8 | Average CPU cores  nproc reports 8 cores on this machine | 6 (capped, only 6 files to hand out) | 0.0187 s |
 
-All three runs gave the exact same occurrence counts per file, so asking for more threads never changed the answer, only the speed. With files this small, the actual search barely takes any time, so most of what you're measuring is the overhead of creating and joining threads — that's why 6 threads isn't clearly faster than 2, and why asking for 8 threads doesn't help once it gets capped down to 6. You'd need much bigger files before adding threads actually pays off.
+All three runs gave the exact same occurrence counts per file, so asking for more threads never changed the answer, only the speed. With files this small, the actual search barely takes any time, so most of what you're measuring is the overhead of creating and joining threads  that's why 6 threads isn't clearly faster than 2, and why asking for 8 threads doesn't help once it gets capped down to 6\. You'd need much bigger files before adding threads actually pays off.
 
-### Challenges
+## **Challenges**
 
-Coordinating shared output access was solved with a mutex around the write section only, so the (slower) file-reading and searching work still happens fully in parallel outside the lock. Capping thread count to file count avoids spawning idle threads with nothing to search.
+The main challenge was understanding how to safely write to one output file from multiple threads. Without synchronization, two threads could write at the same time and produce incorrect or mixed output. I solved this by protecting the writing section with pthread\_mutex\_lock() and pthread\_mutex\_unlock(). Another challenge was handling cases where the requested number of threads was greater than the number of input files. I solved this by limiting the number of threads to the number of available files so that every thread had useful work to do.
